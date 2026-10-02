@@ -1,0 +1,43 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: notes
+      POSTGRES_PASSWORD: notes
+      POSTGRES_DB: notesanalyser
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notes -d notesanalyser"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Optional: the API image + the built client on one origin, like production but local.
+  #   npm run build && docker compose --profile app up --build   ->  http://localhost:8080
+  app:
+    profiles: ["app"]
+    build: .
+    env_file: ./server/.env
+    environment:
+      DATABASE_URL: postgres://notes:notes@db:5432/notesanalyser
+      NODE_ENV: production
+      PORT: "10000"
+      SERVE_CLIENT: "true"
+      CLIENT_ORIGIN: http://localhost:8080
+      APP_URL: http://localhost:8080
+      TRUST_PROXY: "0"
+      COOKIE_SECURE: "false" # plain http on localhost
+    ports:
+      - "8080:10000"
+    volumes:
+      - ./client/dist:/app/client/dist:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
