@@ -1,0 +1,144 @@
+@import "@fontsource-variable/inter";
+@import "tailwindcss";
+
+/* Class-based dark mode: <html class="dark"> is managed by ThemeContext + the inline script in index.html. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@layer base {
+  body {
+    @apply min-h-screen bg-zinc-50 font-sans text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+  }
+  /* Smooth theme switches. Utilities that set their own transition still win (utilities layer). */
+  *, ::before, ::after {
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, fill 150ms ease, stroke 150ms ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after { transition: none !important; animation-duration: 0.01ms !important; }
+  }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-indigo-500; }
+}
+
+/* ---------- Design tokens as utilities (zinc neutrals + indigo accent) ---------- */
+@utility text-muted { @apply text-zinc-500 dark:text-zinc-400; }
+@utility link { @apply font-medium text-indigo-600 hover:underline dark:text-indigo-400; }
+
+@utility card { @apply rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900; }
+
+@utility input {
+  @apply w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400
+    focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20
+    dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500;
+}
+@utility label { @apply mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300; }
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60;
+}
+/* indigo-600 is used in both modes: white on indigo-500 falls just below WCAG AA. */
+@utility btn-primary { @apply btn bg-indigo-600 text-white hover:bg-indigo-700; }
+@utility btn-secondary {
+  @apply btn border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50
+    dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800;
+}
+@utility btn-ghost { @apply btn text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100; }
+
+/* For later phases: citation chips, quiz option states, progress bar, dropzone, skeletons. */
+@utility chip {
+  @apply inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-700
+    dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300;
+}
+@utility option {
+  @apply w-full rounded-lg border border-zinc-200 bg-white px-4 py-3 text-left text-sm hover:border-zinc-300 hover:bg-zinc-50
+    dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700 dark:hover:bg-zinc-800;
+}
+@utility option-selected { @apply border-indigo-500 bg-indigo-50 text-indigo-900 dark:border-indigo-400 dark:bg-indigo-950/60 dark:text-indigo-100; }
+@utility option-correct { @apply border-emerald-500 bg-emerald-50 text-emerald-900 dark:border-emerald-400 dark:bg-emerald-950/60 dark:text-emerald-100; }
+@utility option-wrong { @apply border-red-500 bg-red-50 text-red-900 dark:border-red-400 dark:bg-red-950/60 dark:text-red-100; }
+@utility progress-track { @apply h-1.5 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800; }
+@utility progress-bar { @apply h-full rounded-full bg-indigo-600 transition-[width] duration-300 dark:bg-indigo-400; }
+@utility dropzone {
+  @apply rounded-xl border-2 border-dashed border-zinc-300 bg-white p-10 text-center hover:border-indigo-400
+    dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-indigo-500;
+}
+@utility skeleton { @apply animate-pulse rounded-md bg-zinc-200 dark:bg-zinc-800; }
+
+/* Markdown in chat answers (no typography plugin: just the essentials). */
+@utility prose-chat {
+  & > * + * { margin-top: 0.6em; }
+  & ul { list-style: disc; padding-left: 1.25rem; }
+  & ol { list-style: decimal; padding-left: 1.25rem; }
+  & li + li { margin-top: 0.25em; }
+  & strong { font-weight: 600; }
+  & h1, & h2, & h3 { font-weight: 600; margin-top: 1em; }
+  & code { @apply rounded bg-zinc-100 px-1 py-0.5 text-[0.85em] dark:bg-zinc-800; }
+  & pre { @apply overflow-x-auto rounded-lg bg-zinc-100 p-3 text-xs dark:bg-zinc-800; }
+  & pre code { background: none; padding: 0; }
+  & table { @apply w-full border-collapse text-xs; }
+  & th, & td { @apply border border-zinc-200 px-2 py-1 text-left dark:border-zinc-700; }
+  & blockquote { @apply border-l-2 border-zinc-300 pl-3 text-zinc-600 dark:border-zinc-700 dark:text-zinc-400; }
+}
+
+/* Inline Markdown (quiz options, question stems). */
+@utility prose-inline {
+  & code { @apply rounded bg-zinc-100 px-1 py-0.5 font-mono text-[0.85em] dark:bg-zinc-800; }
+  & strong { font-weight: 600; }
+}
+
+/* Code blocks: header bar (language + copy) sits on top of the <pre>. */
+.code-block { @apply my-3 overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700; }
+.code-block pre { @apply m-0 rounded-none border-0; }
+
+/* Syntax highlighting (highlight.js classes from rehype-highlight).
+   Colours meet WCAG AA against the code background in each theme (zinc-100 / zinc-800). */
+.hljs-keyword, .hljs-selector-tag, .hljs-doctag, .hljs-meta .hljs-keyword { color: #6d28d9; }
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-template-tag { color: #047857; }
+.hljs-comment, .hljs-quote { color: #52525b; font-style: italic; }
+.hljs-number, .hljs-literal, .hljs-symbol, .hljs-bullet { color: #b45309; }
+.hljs-title, .hljs-title.function_, .hljs-section { color: #1d4ed8; }
+.hljs-built_in, .hljs-type, .hljs-title.class_ { color: #be185d; }
+.hljs-attr, .hljs-attribute, .hljs-property, .hljs-variable, .hljs-template-variable, .hljs-params { color: #0e7490; }
+.hljs-tag, .hljs-name, .hljs-selector-class, .hljs-selector-id { color: #9f1239; }
+.hljs-deletion { color: #b91c1c; }
+.hljs-meta { color: #4b5563; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }
+
+.dark .hljs-keyword, .dark .hljs-selector-tag, .dark .hljs-doctag, .dark .hljs-meta .hljs-keyword { color: #c4b5fd; }
+.dark .hljs-string, .dark .hljs-regexp, .dark .hljs-addition, .dark .hljs-template-tag { color: #6ee7b7; }
+.dark .hljs-comment, .dark .hljs-quote { color: #a1a1aa; }
+.dark .hljs-number, .dark .hljs-literal, .dark .hljs-symbol, .dark .hljs-bullet { color: #fcd34d; }
+.dark .hljs-title, .dark .hljs-title.function_, .dark .hljs-section { color: #93c5fd; }
+.dark .hljs-built_in, .dark .hljs-type, .dark .hljs-title.class_ { color: #f9a8d4; }
+.dark .hljs-attr, .dark .hljs-attribute, .dark .hljs-property, .dark .hljs-variable, .dark .hljs-template-variable, .dark .hljs-params { color: #67e8f9; }
+.dark .hljs-tag, .dark .hljs-name, .dark .hljs-selector-class, .dark .hljs-selector-id { color: #fda4af; }
+.dark .hljs-deletion { color: #fca5a5; }
+.dark .hljs-meta { color: #d4d4d8; }
+
+/* Callouts (Callout.jsx): calm tint + subtle left border. Amber for pitfalls; red only for real errors. */
+.callout { @apply my-3 rounded-lg border border-l-4 px-3.5 py-2.5; }
+.callout-title { @apply mb-1 flex items-center gap-1.5 text-[0.8rem] font-semibold tracking-wide; }
+.callout-body { @apply text-zinc-800 dark:text-zinc-200; }
+.callout-body > :first-child { margin-top: 0; }
+.callout-body > :last-child { margin-bottom: 0; }
+.callout-important { @apply border-indigo-500/25 border-l-indigo-500/60 bg-indigo-500/10; }
+.callout-important .callout-title { @apply text-indigo-700 dark:text-indigo-300; }
+.callout-mistake { @apply border-amber-500/25 border-l-amber-500/60 bg-amber-500/10; }
+.callout-mistake .callout-title { @apply text-amber-800 dark:text-amber-300; }
+.callout-tip { @apply border-emerald-500/25 border-l-emerald-500/60 bg-emerald-500/10; }
+.callout-tip .callout-title { @apply text-emerald-800 dark:text-emerald-300; }
+.callout-example { @apply border-zinc-500/25 border-l-zinc-500/50 bg-zinc-500/10; }
+.callout-example .callout-title { @apply text-zinc-700 dark:text-zinc-300; }
+.callout-note { @apply border-slate-500/25 border-l-slate-500/50 bg-slate-500/10; }
+.callout-note .callout-title { @apply text-slate-700 dark:text-slate-300; }
+.example-badge { @apply mr-1 inline-block rounded-md px-1.5 py-0.5 text-[0.75rem] font-semibold; }
+.example-added { @apply bg-violet-100 text-violet-800 dark:bg-violet-950/70 dark:text-violet-200; }
+.example-notes { @apply bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200; }
+/* Notes: clearer section rhythm and task-list checkboxes. */
+.notes h1 { @apply text-lg; }
+.notes h2 { @apply mt-6 border-b border-zinc-200 pb-1 text-base dark:border-zinc-800; }
+.prose-chat ul.contains-task-list { list-style: none; padding-left: 0.25rem; }
+.prose-chat input[type='checkbox'] { @apply mr-1.5 align-middle accent-indigo-600; }
