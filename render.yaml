@@ -1,0 +1,47 @@
+# Render Blueprint: the API as a Docker web service. Dashboard -> New -> Blueprint -> pick this repo.
+# Secrets marked `sync: false` are asked for when the Blueprint is created (never commit them).
+services:
+  - type: web
+    name: notesanalyser-api # -> https://notesanalyser-api.onrender.com (if the name is free; else update client/vercel.json)
+    runtime: docker
+    plan: free
+    region: singapore # pick the region closest to your Supabase project
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health # runs SELECT 1, so uptime pings also keep Supabase awake
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Browser -> Vercel (rewrite) -> Render's proxy -> app. 2 hops so rate limits see the real client IP.
+      # Use 1 if the browser calls Render directly (fallback mode).
+      - key: TRUST_PROXY
+        value: "2"
+      - key: DATABASE_URL # Supabase Session pooler string (port 5432)
+        sync: false
+      - key: DB_SSL
+        value: require
+      - key: DB_POOL_MAX
+        value: "5"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CLIENT_ORIGIN # your Vercel URL, e.g. https://notesanalyser.vercel.app (links in emails, CORS in fallback mode)
+        sync: false
+      - key: COOKIE_SAMESITE # lax with the Vercel rewrite; none in fallback mode
+        value: lax
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: LLM_PROVIDER
+        value: openai
+      - key: LLM_BUDGET_USD # hard spend cap, counted in THIS database: set it to what's left of your OpenAI balance allowance
+        sync: false
+      - key: EMBED_DIMENSIONS
+        value: "1536"
+      - key: EMAIL_PROVIDER # brevo | resend | console (Render free blocks SMTP)
+        value: brevo
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_FROM # "NotesAnalyser <verified-sender@yourdomain.com>"
+        sync: false
+      - key: LOG_LEVEL
+        value: info

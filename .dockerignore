@@ -1,0 +1,11 @@
+.git
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+**/.DS_Store
+server/storage
+server/test
+# The client is deployed to Vercel; the API image doesn't need it.
+client
