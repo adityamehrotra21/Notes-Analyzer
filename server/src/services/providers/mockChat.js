@@ -135,7 +135,8 @@ export const mockChat = {
   model: () => 'mock',
   local: true, // no network, no billing
 
-  async generate({ messages, json }) {
+  async generate({ messages, json, image }) {
+    if (image) return { text: '# Mock transcription\n\nPhotosynthesis converts light energy into chemical energy stored in glucose.', finishReason: 'stop' };
     if (json) return { text: fakeJSON(json.name, messages.at(-1)?.content ?? ''), finishReason: 'stop' };
     return { text: fakeAnswer(messages), finishReason: 'stop' };
   },

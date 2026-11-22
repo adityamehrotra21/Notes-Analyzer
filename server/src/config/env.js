@@ -58,6 +58,8 @@ const schema = z.object({
   // ---- Forgot password (emailed one-time code)
   OTP_TTL_MINUTES: optionalInt(10),
   OTP_MAX_ATTEMPTS: optionalInt(5),
+  // Signup: reject domains that can't receive mail (DNS lookup). Set false for offline dev/tests.
+  EMAIL_DNS_CHECK: z.stringbool().default(true),
   OTP_RESEND_SECONDS: optionalInt(60),
 
   // ---- LLM providers. Swap by env only:
@@ -100,6 +102,7 @@ const schema = z.object({
   MAX_OUTPUT_TOKENS_NOTES_FILL: optionalInt(4000), // sections for topics the coverage check found missing
   MAX_OUTPUT_TOKENS_OUTLINE: optionalInt(2000), // topic outline extraction (gpt-5-nano)
   MAX_OUTPUT_TOKENS_CLASSIFY: optionalInt(200), // intent fallback classifier (gpt-5-nano)
+  MAX_OUTPUT_TOKENS_OCR: optionalInt(3000), // text transcribed from one uploaded image
 
   // ---- Embeddings. "hash" is an offline lexical embedder for testing (not for real use).
   EMBED_PROVIDER: z.enum(['openai', 'gemini', 'hash']).default('openai'),

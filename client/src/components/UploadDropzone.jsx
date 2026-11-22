@@ -6,9 +6,22 @@ import { documentsApi, MAX_FILE_MB, MAX_FILES } from '../api/documents.js';
 import { getErrorMessage } from '../api/client.js';
 
 const REJECTION_TEXT = {
-  'file-invalid-type': 'only PDF files are allowed',
+  'file-invalid-type': 'use PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), an image or a text file',
   'file-too-large': `must be ${MAX_FILE_MB} MB or smaller`,
   'too-many-files': `upload up to ${MAX_FILES} files at a time`,
+};
+
+const ACCEPT = {
+  'application/pdf': ['.pdf'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+  'image/png': ['.png'],
+  'image/jpeg': ['.jpg', '.jpeg'],
+  'image/webp': ['.webp'],
+  'text/plain': ['.txt'],
+  'text/markdown': ['.md'],
+  'text/csv': ['.csv'],
 };
 
 export default function UploadDropzone({ onUploaded }) {
@@ -48,7 +61,7 @@ export default function UploadDropzone({ onUploaded }) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     onDropRejected,
-    accept: { 'application/pdf': ['.pdf'] },
+    accept: ACCEPT,
     maxSize: MAX_FILE_MB * 1024 * 1024,
     maxFiles: MAX_FILES,
     disabled: uploading,
@@ -72,9 +85,9 @@ export default function UploadDropzone({ onUploaded }) {
         </div>
       ) : (
         <>
-          <p className="mt-3 text-sm font-medium">{isDragActive ? 'Drop to upload' : 'Drag PDFs here, or click to browse'}</p>
+          <p className="mt-3 text-sm font-medium">{isDragActive ? 'Drop to upload' : 'Drag files here, or click to browse'}</p>
           <p className="text-muted mt-1 text-xs">
-            Up to {MAX_FILES} files, {MAX_FILE_MB} MB each. Text-based PDFs only (no scans).
+            PDF, Word, PowerPoint, Excel, images (PNG, JPG, WEBP) or text. Up to {MAX_FILES} files, {MAX_FILE_MB} MB each.
           </p>
         </>
       )}

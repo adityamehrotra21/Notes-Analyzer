@@ -5,7 +5,7 @@ import { documentsApi } from '../api/documents.js';
 import { getErrorMessage } from '../api/client.js';
 import Spinner from './Spinner.jsx';
 
-/** Re-chunk + re-embed a document from its stored PDF, after confirming what will change. */
+/** Re-chunk + re-embed a document from its stored file, after confirming what will change. */
 export default function ReindexButton({ doc, onDone }) {
   const [busy, setBusy] = useState(false);
   const alive = useRef(true);
@@ -19,8 +19,8 @@ export default function ReindexButton({ doc, onDone }) {
 
   if (!doc.hasFile) {
     return (
-      <span className="text-muted text-xs" title="Files uploaded before re-indexing existed weren't stored. Upload the same PDF again once.">
-        Re-upload this PDF once to enable re-indexing
+      <span className="text-muted text-xs" title="Files uploaded before re-indexing existed weren't stored. Upload the same file again once.">
+        Re-upload this file once to enable re-indexing
       </span>
     );
   }

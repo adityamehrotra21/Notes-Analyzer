@@ -5,7 +5,10 @@ import { db } from '../db/index.js';
 import { chunks as chunksTable, documents } from '../db/schema.js';
 import { RateQueue } from '../utils/rateQueue.js';
 import { AppError } from '../utils/AppError.js';
-import { extractPages, cleanPages, PdfError } from './pdfService.js';
+import { cleanPages, PdfError } from './pdfService.js';
+import { detectFormat, extractDocument, isImageFormat } from './documentParser.js';
+import { transcribeImage } from './imageTextService.js';
+import { readImageText, saveImageText } from './fileStorage.js';
 import { chunkPages } from './chunker.js';
 import { embedDocuments } from './embeddingService.js';
 import { replaceDocumentChunks } from './vectorStore.js';
@@ -29,13 +32,13 @@ function userMessage(err) {
   return `Processing failed: ${String(err?.message ?? err).slice(0, 200)}`;
 }
 
-/** Parse + clean + chunk a PDF (CPU only, no API calls). Used by ingestion and the re-index estimate. */
-export async function prepareChunks(buffer) {
+/** Parse + clean + chunk a file (CPU only, no API calls). Used by ingestion and the re-index estimate. */
+export async function prepareChunks(buffer, filename, { imageText } = {}) {
   const t0 = Date.now();
-  const { pageCount, pages: raw } = await extractPages(buffer);
+  const { pageCount, pages: raw } = await extractDocument(buffer, filename, { imageText });
   const { pages, removedLines } = cleanPages(raw);
   if (!pages.some((p) => p.text.length > 20)) {
-    throw new IngestionError('No extractable text found. Scanned or image-only PDFs are not supported.');
+    throw new IngestionError('No readable text found in this file. Scanned PDFs are not supported: upload the pages as images instead.');
   }
   const pieces = chunkPages(pages);
   const tokens = pieces.reduce((n, c) => n + c.tokenCount, 0);
@@ -74,8 +77,17 @@ async function ingest({ documentId, userId, buffer, filename, reindex = false, p
     }
 
     set({ stage: 'parsing' });
-    const { pageCount, pages, pieces, tokens, removedLines, durationMs } = await prepareChunks(buffer);
-    log.info('parsed PDF', { documentId, pageCount, pagesWithText: pages.filter((p) => p.text).length, removedHeaderFooterLines: removedLines.length, durationMs });
+    const format = detectFormat(buffer, filename);
+    let imageText;
+    if (isImageFormat(format)) {
+      imageText = await readImageText(userId, documentId); // already paid for: never transcribe twice
+      if (!imageText) {
+        imageText = await transcribeImage(buffer, format);
+        await saveImageText(userId, documentId, imageText);
+      }
+    }
+    const { pageCount, pages, pieces, tokens, removedLines, durationMs } = await prepareChunks(buffer, filename, { imageText });
+    log.info('parsed file', { documentId, pageCount, pagesWithText: pages.filter((p) => p.text).length, removedHeaderFooterLines: removedLines.length, durationMs });
     set({ stage: 'chunking' });
     log.info('chunked', { documentId, chunks: pieces.length, tokens, avgTokens: Math.round(tokens / (pieces.length || 1)), previousChunks: reindex ? previousChunks : undefined });
 

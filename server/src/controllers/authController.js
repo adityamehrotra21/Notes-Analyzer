@@ -11,6 +11,7 @@ import { issueCode, verifyCode } from '../services/otpService.js';
 import { env } from '../config/env.js';
 import { clearRefreshCookie, readRefreshCookie, setRefreshCookie } from '../utils/authCookie.js';
 import { escapeHtml, layout, mailConfigured, sendMail } from '../services/mailService.js';
+import { newAccountEmailProblem } from '../utils/email.js';
 import logger from '../utils/logger.js';
 
 const log = logger.child({ module: 'auth' });
@@ -32,6 +33,8 @@ async function startSession(req, res, user) {
 
 export async function register(req, res) {
   const { name, email, password } = req.body;
+  const emailProblem = await newAccountEmailProblem(email);
+  if (emailProblem) throw new AppError(422, emailProblem);
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const [user] = await db
     .insert(users)

@@ -291,7 +291,7 @@ function attemptMarkdown(attempt) {
 }
 
 const datePart = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in the server's local time zone
-const fileSlug = (s) => String(s).replace(/\.pdf$/i, '').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 60) || 'notes';
+const fileSlug = (s) => String(s).replace(/\.(pdf|docx|pptx|xlsx|txt|md|csv|png|jpe?g|webp)$/i, '').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 60) || 'notes';
 
 /**
  * Build the export. Returns { title, subtitle, sourceName, markdown, filenameBase }.

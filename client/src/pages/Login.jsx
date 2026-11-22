@@ -6,6 +6,8 @@ import { getErrorMessage } from '../api/client.js';
 import AuthCard from '../components/AuthCard.jsx';
 import Spinner from '../components/Spinner.jsx';
 import PasswordInput from '../components/PasswordInput.jsx';
+import EmailInput from '../components/EmailInput.jsx';
+import { emailError } from '../utils/email.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 export default function Login() {
@@ -14,12 +16,15 @@ export default function Login() {
   const location = useLocation();
   const [form, setForm] = useState({ email: location.state?.email ?? '', password: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [attempted, setAttempted] = useState(false);
   useDocumentTitle('Log in');
 
   if (user) return <Navigate to="/dashboard" replace />;
 
   const onSubmit = async (e) => {
     e.preventDefault();
+    setAttempted(true);
+    if (emailError(form.email)) return;
     setSubmitting(true);
     try {
       await login(form);
@@ -39,11 +44,8 @@ export default function Login() {
       subtitle="Log in to analyse your notes"
       footer={<>No account? <Link to="/register" className="link">Create one</Link></>}
     >
-      <form onSubmit={onSubmit} className="space-y-4">
-        <label className="block">
-          <span className="label">Email</span>
-          <input type="email" required autoComplete="email" className="input" value={form.email} onChange={set('email')} />
-        </label>
+      <form onSubmit={onSubmit} noValidate className="space-y-4">
+        <EmailInput id="login-email" value={form.email} onChange={(email) => setForm((f) => ({ ...f, email }))} showError={attempted} />
         <div>
           <div className="flex items-baseline justify-between">
             <label htmlFor="login-password" className="label">Password</label>

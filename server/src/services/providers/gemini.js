@@ -27,7 +27,10 @@ function buildRequest({ model, system, messages, maxOutputTokens, temperature, s
   }
   return {
     model: model ?? requireVar('GEMINI_CHAT_MODEL'),
-    contents: messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
+    contents: messages.map((m, i) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }, ...(image && i === messages.length - 1 ? [{ inlineData: { mimeType: image.mime, data: image.base64 } }] : [])],
+    })),
     config,
   };
 }

@@ -2,6 +2,16 @@
 
 All notable changes to NotesAnalyser. Newest first. One entry per phase/change.
 
+## 2026-11-22 — Email validation and more upload formats
+
+- Email checks on login, signup and forgot password:
+  - Strict format check with an inline error. Spaces and capitals are normalised.
+  - Signup also catches common typos ("Did you mean name@gmail.com?") and rejects domains that can't receive mail (DNS MX lookup; `EMAIL_DNS_CHECK`, default on). A DNS outage never blocks a signup.
+  - This does not prove the inbox exists: there is no confirmation email.
+- Uploads now accept PDF, Word (.docx), PowerPoint (.pptx, with speaker notes), Excel (.xlsx), images (PNG, JPG, WEBP) and text (.txt, .md, .csv). `server/src/services/documentParser.js` detects the type from the file's bytes. Adds the `jszip` dependency.
+- Images are transcribed by the vision model (`gpt-5-mini`) through the budget guard, recorded as feature `upload`. The text is stored beside the file, so re-indexing never pays again.
+- Old .doc/.ppt/.xls and HEIC files are refused with a message saying what to convert to.
+
 ## 2026-11-20 — Deployment: Vercel (client) + Render (API, Docker) + Supabase (Postgres)
 
 - New `Dockerfile` (repo root):

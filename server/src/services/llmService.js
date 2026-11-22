@@ -37,8 +37,9 @@ export const OUTPUT_CAPS = {
   notesFill: env.MAX_OUTPUT_TOKENS_NOTES_FILL,
   outline: env.MAX_OUTPUT_TOKENS_OUTLINE,
   classify: env.MAX_OUTPUT_TOKENS_CLASSIFY,
+  ocr: env.MAX_OUTPUT_TOKENS_OCR,
 };
-const FEATURE = { notes: 'summary', notesFill: 'summary', outline: 'summary', chat: 'chat', chatLong: 'chat', classify: 'chat', questions: 'questions', quiz: 'quiz', summaryMap: 'summary', summaryReduce: 'summary' };
+const FEATURE = { notes: 'summary', notesFill: 'summary', outline: 'summary', chat: 'chat', chatLong: 'chat', classify: 'chat', questions: 'questions', quiz: 'quiz', summaryMap: 'summary', summaryReduce: 'summary', ocr: 'upload' };
 
 export const modelInfo = (tier = 'main') => ({ provider: env.LLM_PROVIDER, model: provider().model(tier) });
 
@@ -113,10 +114,13 @@ function execute(p, o, fn, inputTokens) {
   return withRetry(() => queue.add(() => fn(p), { weight: inputTokens + o.maxOutputTokens }), { label: o.label ?? o.step });
 }
 
+// Upper bound for one high-detail image, so the reservation covers it; settle() uses the real count.
+const IMAGE_INPUT_TOKENS = 3000;
+
 /** One billed call: reserve -> provider -> settle -> log. */
 async function callOnce(opts) {
   const { p, o } = resolve(opts);
-  const inputTokens = promptTokens(o);
+  const inputTokens = promptTokens(o) + (o.image ? IMAGE_INPUT_TOKENS : 0);
   const reservation = reserve(p, o, inputTokens);
   const t0 = Date.now();
   let res;
@@ -131,6 +135,9 @@ async function callOnce(opts) {
   logCall({ p, o, usage, cost, t0, finishReason: res.finishReason, estimated: !res.usage });
   return { ...res, text: res.text ?? '', usage, o };
 }
+
+/** One vision call: opts.image = { mime, base64 }. No continuation (it would resend the image). */
+export const generateFromImage = (opts) => callOnce(opts);
 
 export const CONTINUE_PROMPT =
   'Continue exactly where you stopped. Do not repeat anything you already wrote, do not add a preamble, and keep the same format.';

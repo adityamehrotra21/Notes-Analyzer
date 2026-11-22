@@ -4,7 +4,8 @@ import { chunks, documents, users } from '../db/schema.js';
 import { AppError } from '../utils/AppError.js';
 import { createHash } from 'node:crypto';
 import { enqueueIngestion, getProgress, prepareChunks } from '../services/ingestionService.js';
-import { deletePdf, hasPdf, readPdf, savePdf } from '../services/fileStorage.js';
+import { deletePdf, hasPdf, readImageText, readPdf, savePdf } from '../services/fileStorage.js';
+import { detectFormat, isImageFormat } from '../services/documentParser.js';
 import { env } from '../config/env.js';
 import { costUsd, priceFor } from '../config/pricing.js';
 import budgetService from '../services/budgetService.js';
@@ -38,14 +39,13 @@ const withProgress = ({ summaryBrief, summaryDetailed, summaryExam, summaryCover
   progress: d.status === 'processing' ? getProgress(d.id) : null,
 });
 
-const isPdf = (buf) => buf.subarray(0, 1024).includes('%PDF-');
-const cleanName = (name) => name.replace(/[\\/]/g, '_').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 255) || 'untitled.pdf';
+const cleanName = (name) => name.replace(/[\\/]/g, '_').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 255) || 'untitled';
 
 export async function uploadDocuments(req, res) {
   const files = req.files ?? [];
-  if (!files.length) throw AppError.badRequest('No PDF files received (use the "files" field)');
-  const bad = files.find((f) => !isPdf(f.buffer));
-  if (bad) throw new AppError(415, `${bad.originalname} is not a valid PDF`);
+  if (!files.length) throw AppError.badRequest('No files received (use the "files" field)');
+  const bad = files.find((f) => !detectFormat(f.buffer, f.originalname));
+  if (bad) throw new AppError(415, `${bad.originalname} is damaged or isn't really this file type`);
 
   const userId = req.user.id;
   const out = [];
@@ -68,7 +68,10 @@ export async function uploadDocuments(req, res) {
       out.push({ ...existing, duplicate: true, fileAttached: attach });
       continue;
     }
-    if (existing) await db.delete(documents).where(eq(documents.id, existing.id)); // retry of a failed upload
+    if (existing) {
+      await db.delete(documents).where(eq(documents.id, existing.id)); // retry of a failed upload
+      await deletePdf(userId, existing.id);
+    }
 
     let doc;
     try {
@@ -121,7 +124,7 @@ async function loadForReindex(userId, documentId) {
   if (!doc) throw AppError.notFound('Document not found');
   if (doc.status === 'processing') throw AppError.conflict('This document is already being processed');
   if (!hasPdf(userId, documentId)) {
-    throw new AppError(409, 'The original PDF is not stored for this document (it was uploaded before files were kept). Upload the same PDF again once to enable re-indexing.');
+    throw new AppError(409, 'The original file is not stored for this document. Upload the same file again once to enable re-indexing.');
   }
   return doc;
 }
@@ -129,7 +132,10 @@ async function loadForReindex(userId, documentId) {
 /** Re-chunk locally (no API calls) and price the embeddings at pricing.js rates. */
 async function estimateReindex(userId, doc) {
   const buffer = await readPdf(userId, doc.id);
-  const { pageCount, pieces, tokens } = await prepareChunks(buffer);
+  const isImage = isImageFormat(detectFormat(buffer, doc.filename));
+  const imageText = isImage ? await readImageText(userId, doc.id) : undefined;
+  // An image with no saved transcription can't be chunked without a paid call, so report the current index.
+  const { pageCount, pieces, tokens } = isImage && !imageText ? { pageCount: 1, pieces: { length: doc.chunkCount }, tokens: 0 } : await prepareChunks(buffer, doc.filename, { imageText });
   const model = env.EMBED_PROVIDER === 'openai' ? env.OPENAI_EMBED_MODEL : env.EMBED_PROVIDER;
   const price = priceFor(model);
   const estimatedUsd = price ? Math.round(costUsd(price, { inputTokens: tokens }) * 1e8) / 1e8 : 0;

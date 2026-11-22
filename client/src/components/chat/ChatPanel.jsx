@@ -101,7 +101,7 @@ export default function ChatPanel({ documentIds, messages, setMessages }) {
             <MessageCircleQuestion className="text-muted h-8 w-8" aria-hidden />
             <p className="mt-3 text-sm font-medium">Ask any doubt about your notes</p>
             <p className="text-muted mt-1 max-w-md text-xs">
-              Answers are based on your PDF, with page references. Ask follow-ups any time, like &quot;I still don&apos;t get it&quot;, &quot;explain with an
+              Answers are based on your notes, with page references. Ask follow-ups any time, like &quot;I still don&apos;t get it&quot;, &quot;explain with an
               example&quot; or &quot;in Hinglish&quot;.
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-2">

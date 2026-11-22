@@ -67,7 +67,7 @@ export default function Dashboard() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Hi, {user?.name}</h1>
-        <p className="text-muted mt-1 text-sm">Upload PDF notes to summarise, clear your doubts and quiz yourself on.</p>
+        <p className="text-muted mt-1 text-sm">Upload your notes to summarise, clear your doubts and quiz yourself on.</p>
       </div>
 
       <UploadDropzone onUploaded={onUploaded} />
@@ -106,7 +106,7 @@ export default function Dashboard() {
           <div className="card px-6 py-12 text-center">
             <FolderOpen className="text-muted mx-auto h-8 w-8" aria-hidden />
             <p className="mt-3 text-sm font-medium">No documents yet</p>
-            <p className="text-muted mt-1 text-xs">Upload a PDF above to get started.</p>
+            <p className="text-muted mt-1 text-xs">Upload a file above to get started.</p>
           </div>
         )}
       </section>

@@ -1,6 +1,6 @@
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 
-const STAGES = { queued: 'Queued', parsing: 'Reading PDF', chunking: 'Splitting', embedding: 'Indexing', saving: 'Saving' };
+const STAGES = { queued: 'Queued', parsing: 'Reading file', chunking: 'Splitting', embedding: 'Indexing', saving: 'Saving' };
 
 function progressLabel(progress) {
   if (!progress) return 'Processing';

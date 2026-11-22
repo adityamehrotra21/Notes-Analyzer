@@ -1,5 +1,7 @@
-// Stores uploaded PDFs on disk so documents can be re-indexed (re-chunked + re-embedded) later.
+// Stores uploaded files on disk so documents can be re-indexed (re-chunked + re-embedded) later.
 // Layout: STORAGE_DIR/pdfs/<userId>/<documentId>.pdf   (STORAGE_DIR is git-ignored)
+// Every format uses this path (the extension is historical); the type is detected from the bytes.
+// Images also keep <documentId>.txt, their paid transcription, so re-indexing never pays twice.
 import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -34,8 +36,24 @@ export async function pdfSize(userId, documentId) {
   }
 }
 
-/** Removes exactly one stored file (never a directory). Missing file is fine. */
+const textPathFor = (userId, documentId) => pathFor(userId, documentId).replace(/\.pdf$/, '.txt');
+
+export async function saveImageText(userId, documentId, text) {
+  await writeFile(textPathFor(userId, documentId), text, 'utf8');
+}
+
+export async function readImageText(userId, documentId) {
+  try {
+    return await readFile(textPathFor(userId, documentId), 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+/** Removes exactly one stored file and its transcription (never a directory). Missing files are fine. */
 export async function deletePdf(userId, documentId) {
+  await unlink(textPathFor(userId, documentId)).catch(() => {});
   try {
     await unlink(pathFor(userId, documentId));
     log.info('deleted stored PDF', { documentId });

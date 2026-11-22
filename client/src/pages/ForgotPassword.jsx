@@ -6,6 +6,8 @@ import { authApi } from '../api/auth.js';
 import { getErrorMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import AuthCard from '../components/AuthCard.jsx';
+import EmailInput from '../components/EmailInput.jsx';
+import { emailError } from '../utils/email.js';
 import Spinner from '../components/Spinner.jsx';
 import PasswordInput from '../components/PasswordInput.jsx';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
@@ -19,6 +21,7 @@ export default function ForgotPassword() {
   const location = useLocation();
   const [step, setStep] = useState('email');
   const [email, setEmail] = useState(location.state?.email ?? '');
+  const [attempted, setAttempted] = useState(false);
   const [form, setForm] = useState({ code: '', password: '', confirm: '' });
   const [busy, setBusy] = useState(false);
   const [wait, setWait] = useState(0); // seconds until "Resend code" is allowed
@@ -35,6 +38,8 @@ export default function ForgotPassword() {
 
   const sendCode = async (e) => {
     e?.preventDefault();
+    setAttempted(true);
+    if (emailError(email)) return;
     setBusy(true);
     try {
       const r = await authApi.forgotPassword(email);
@@ -75,11 +80,8 @@ export default function ForgotPassword() {
   if (step === 'email') {
     return (
       <AuthCard title="Forgot your password?" subtitle="We'll email you a 6-digit code to reset it." footer={footer}>
-        <form onSubmit={sendCode} className="space-y-4">
-          <label className="block">
-            <span className="label">Email</span>
-            <input type="email" required autoComplete="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </label>
+        <form onSubmit={sendCode} noValidate className="space-y-4">
+          <EmailInput id="forgot-email" value={email} onChange={setEmail} showError={attempted} />
           <button type="submit" className="btn-primary w-full" disabled={busy}>
             {busy ? <Spinner className="h-4 w-4 text-white" /> : 'Send code'}
           </button>

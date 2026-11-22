@@ -31,7 +31,7 @@ export const isReasoningModel = (model) => /^(gpt-5|o\d)/i.test(model ?? '');
 const unsupported = new Set();
 let jsonSchemaUnsupported = false;
 
-function buildBody({ model, tier, system, messages, maxOutputTokens, temperature, json, cacheKey, reasoningEffort }) {
+function buildBody({ model, tier, system, messages, maxOutputTokens, temperature, json, cacheKey, reasoningEffort, image }) {
   let sys = system;
   let responseFormat;
   if (json && !jsonSchemaUnsupported) {
@@ -43,7 +43,7 @@ function buildBody({ model, tier, system, messages, maxOutputTokens, temperature
   const body = {
     model,
     // System prompt first and stable: OpenAI caches identical prompt prefixes (>= 1024 tokens).
-    messages: [{ role: 'system', content: sys }, ...messages.map((m) => ({ role: m.role, content: m.content }))],
+    messages: [{ role: 'system', content: sys }, ...messages.map((m, i) => ({ role: m.role, content: image && i === messages.length - 1 ? [{ type: 'text', text: m.content }, { type: 'image_url', image_url: { url: `data:${image.mime};base64,${image.base64}`, detail: 'high' } }] : m.content }))],
   };
   if (isReasoningModel(model)) {
     body.max_completion_tokens = maxOutputTokens;
