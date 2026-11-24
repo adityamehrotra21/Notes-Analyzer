@@ -6,9 +6,9 @@ import { chunks as chunksTable, documents } from '../db/schema.js';
 import { RateQueue } from '../utils/rateQueue.js';
 import { AppError } from '../utils/AppError.js';
 import { cleanPages, PdfError } from './pdfService.js';
-import { detectFormat, extractDocument, isImageFormat } from './documentParser.js';
-import { transcribeImage } from './imageTextService.js';
-import { readImageText, saveImageText } from './fileStorage.js';
+import { extractDocument, isImageFormat, pagesNeedingVision } from './documentParser.js';
+import { transcribePages } from './imageTextService.js';
+import { readVisionPages, saveVisionPages } from './fileStorage.js';
 import { chunkPages } from './chunker.js';
 import { embedDocuments } from './embeddingService.js';
 import { replaceDocumentChunks } from './vectorStore.js';
@@ -33,9 +33,11 @@ function userMessage(err) {
 }
 
 /** Parse + clean + chunk a file (CPU only, no API calls). Used by ingestion and the re-index estimate. */
-export async function prepareChunks(buffer, filename, { imageText } = {}) {
+export async function prepareChunks(buffer, filename, { visionPages = {}, extracted } = {}) {
   const t0 = Date.now();
-  const { pageCount, pages: raw } = await extractDocument(buffer, filename, { imageText });
+  const { pageCount, pages: extractedPages } = extracted ?? (await extractDocument(buffer, filename));
+  // A page the vision model read is replaced by its reading (it includes the page's text).
+  const raw = extractedPages.map((p) => (visionPages[p.page] ? { page: p.page, text: visionPages[p.page] } : p));
   const { pages, removedLines } = cleanPages(raw);
   if (!pages.some((p) => p.text.length > 20)) {
     throw new IngestionError('No readable text found in this file. Scanned PDFs are not supported: upload the pages as images instead.');
@@ -77,17 +79,28 @@ async function ingest({ documentId, userId, buffer, filename, reindex = false, p
     }
 
     set({ stage: 'parsing' });
-    const format = detectFormat(buffer, filename);
-    let imageText;
-    if (isImageFormat(format)) {
-      imageText = await readImageText(userId, documentId); // already paid for: never transcribe twice
-      if (!imageText) {
-        imageText = await transcribeImage(buffer, format);
-        await saveImageText(userId, documentId, imageText);
+    const extracted = await extractDocument(buffer, filename);
+    let visionPages;
+    try {
+      visionPages = await readVisionPages(userId, documentId); // already paid for: never read a page twice
+      const todo = pagesNeedingVision(extracted).filter((p) => !(p in visionPages));
+      if (todo.length) {
+        log.info('reading visual pages', { documentId, pages: todo.length });
+        set({ stage: 'vision', done: 0, total: todo.length });
+        const read = await transcribePages(extracted, todo, {
+          strict: isImageFormat(extracted.format),
+          onProgress: (done, total) => set({ stage: 'vision', done, total }),
+          logContext: { documentId },
+        });
+        visionPages = { ...visionPages, ...read };
+        if (Object.keys(read).length) await saveVisionPages(userId, documentId, visionPages);
       }
+    } finally {
+      await extracted.close();
     }
-    const { pageCount, pages, pieces, tokens, removedLines, durationMs } = await prepareChunks(buffer, filename, { imageText });
-    log.info('parsed file', { documentId, pageCount, pagesWithText: pages.filter((p) => p.text).length, removedHeaderFooterLines: removedLines.length, durationMs });
+    set({ stage: 'parsing' });
+    const { pageCount, pages, pieces, tokens, removedLines, durationMs } = await prepareChunks(buffer, filename, { visionPages, extracted });
+    log.info('parsed file', { documentId, pageCount, visionPages: Object.keys(visionPages).length, pagesWithText: pages.filter((p) => p.text).length, removedHeaderFooterLines: removedLines.length, durationMs });
     set({ stage: 'chunking' });
     log.info('chunked', { documentId, chunks: pieces.length, tokens, avgTokens: Math.round(tokens / (pieces.length || 1)), previousChunks: reindex ? previousChunks : undefined });
 

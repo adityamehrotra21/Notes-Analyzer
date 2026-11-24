@@ -1,7 +1,8 @@
 // Stores uploaded files on disk so documents can be re-indexed (re-chunked + re-embedded) later.
 // Layout: STORAGE_DIR/pdfs/<userId>/<documentId>.pdf   (STORAGE_DIR is git-ignored)
 // Every format uses this path (the extension is historical); the type is detected from the bytes.
-// Images also keep <documentId>.txt, their paid transcription, so re-indexing never pays twice.
+// Pages read by the vision model (images, diagram pages) are kept in <documentId>.vision.json, so
+// re-indexing never pays twice. (<documentId>.txt is the older single-image format.)
 import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -37,23 +38,34 @@ export async function pdfSize(userId, documentId) {
 }
 
 const textPathFor = (userId, documentId) => pathFor(userId, documentId).replace(/\.pdf$/, '.txt');
+const visionPathFor = (userId, documentId) => pathFor(userId, documentId).replace(/\.pdf$/, '.vision.json');
 
-export async function saveImageText(userId, documentId, text) {
-  await writeFile(textPathFor(userId, documentId), text, 'utf8');
-}
-
-export async function readImageText(userId, documentId) {
+async function readOptional(file) {
   try {
-    return await readFile(textPathFor(userId, documentId), 'utf8');
+    return await readFile(file, 'utf8');
   } catch (err) {
     if (err.code === 'ENOENT') return null;
     throw err;
   }
 }
 
+/** @param pages {Record<number, string>} page -> text from the vision model */
+export async function saveVisionPages(userId, documentId, pages) {
+  await writeFile(visionPathFor(userId, documentId), JSON.stringify(pages), 'utf8');
+}
+
+/** @returns {Promise<Record<number, string>>} pages already read by the vision model ({} if none) */
+export async function readVisionPages(userId, documentId) {
+  const json = await readOptional(visionPathFor(userId, documentId));
+  if (json) return JSON.parse(json);
+  const legacy = await readOptional(textPathFor(userId, documentId));
+  return legacy ? { 1: legacy } : {};
+}
+
 /** Removes exactly one stored file and its transcription (never a directory). Missing files are fine. */
 export async function deletePdf(userId, documentId) {
   await unlink(textPathFor(userId, documentId)).catch(() => {});
+  await unlink(visionPathFor(userId, documentId)).catch(() => {});
   try {
     await unlink(pathFor(userId, documentId));
     log.info('deleted stored PDF', { documentId });

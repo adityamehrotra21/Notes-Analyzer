@@ -2,6 +2,17 @@
 
 All notable changes to NotesAnalyser. Newest first. One entry per phase/change.
 
+## 2026-11-24 — Diagrams, charts and scanned pages are read
+
+- Before: a PDF that was mostly diagrams with little text failed ("No readable text found"), and diagram content was lost from every PDF.
+- PDF pages and PowerPoint slides with a picture or drawing and under 700 characters of text are now rendered and read by the vision model. It copies the text and explains each diagram: labels, arrows and flows, and chart axes and trends. Text-heavy pages keep their extracted text, at no cost.
+  - Drawings are detected from the PDF's drawing commands (`pdfjs-dist`, the same version pdf-parse already uses). A logo repeated on most pages is ignored.
+  - Scanned PDFs now work too: each page is a picture.
+  - Pictures inside slides are read if they are PNG, JPG, GIF or WEBP.
+- Image uploads of a diagram with no text no longer fail.
+- Cost control: at most `VISION_MAX_PAGES` (default 30) pages per document, each costing about $0.001–0.003 through the budget guard. Readings are saved in `<id>.vision.json`, so re-indexing never pays again. If the budget runs out mid-document, the remaining pages keep their extracted text and the file still indexes.
+- New progress label: "Reading diagrams N%".
+
 ## 2026-11-22 — Email validation and more upload formats
 
 - Email checks on login, signup and forgot password:

@@ -1,10 +1,14 @@
 // Uploaded file -> per-page text. No env/DB/API access: images are transcribed by imageTextService.
 // "Pages" are real pages (PDF), slides (PPTX), sheets (XLSX), or ~1 screen of text (DOCX, TXT, MD, CSV).
 import JSZip from 'jszip';
-import { extractPages, PdfError } from './pdfService.js';
+import { extractPages, pdfPageRenderer, PdfError } from './pdfService.js';
 
 const MAX_UNZIPPED_BYTES = 80 * 1024 * 1024; // zip-bomb guard
 const TEXT_PAGE_CHARS = 3000;
+// A page/slide with a picture or drawing and less text than this is read by the vision model,
+// so diagrams, charts and scanned pages aren't lost. Text-heavy pages keep their extracted text.
+const VISION_MAX_TEXT_CHARS = 700;
+const SLIDE_IMAGE_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
 
 export const IMAGE_MIME = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' };
 export const UPLOAD_EXTENSIONS = ['pdf', 'docx', 'pptx', 'xlsx', 'txt', 'md', 'csv', 'png', 'jpg', 'jpeg', 'webp'];
@@ -56,10 +60,10 @@ const decodeXml = (s) =>
     return code <= 0x10ffff ? String.fromCodePoint(code) : '';
   });
 
-/** Reads zip entries as text and stops once the total unzipped size passes the limit. */
+/** Reads zip entries (text, or a Buffer with binary=true) and stops once the total unzipped size passes the limit. */
 function zipReader(zip) {
   let total = 0;
-  return (path) => {
+  return (path, binary = false) => {
     const entry = zip.file(path);
     if (!entry) return Promise.resolve(null);
     return new Promise((resolve, reject) => {
@@ -73,7 +77,7 @@ function zipReader(zip) {
         } else parts.push(c);
       });
       stream.on('error', reject);
-      stream.on('end', () => resolve(Buffer.concat(parts).toString('utf8')));
+      stream.on('end', () => resolve(binary ? Buffer.concat(parts) : Buffer.concat(parts).toString('utf8')));
     });
   };
 }
@@ -146,7 +150,9 @@ async function parsePptx(read) {
     const notesXml = notesPath ? await read(notesPath) : null;
     const notes = notesXml ? paragraphs(notesXml, 'a').filter((l) => !/^\d+$/.test(l)) : [];
     if (notes.length) parts.push(`Speaker notes: ${notes.join(' ')}`);
-    pages.push({ page: pages.length + 1, text: parts.join('\n\n') });
+    // Pictures the vision model can read (EMF/WMF/SVG/TIFF aren't supported by it).
+    const media = [...slideRels.values()].filter((r) => r.type.endsWith('/image') && SLIDE_IMAGE_MIME[extensionOf(r.path)]).map((r) => r.path);
+    pages.push({ page: pages.length + 1, text: parts.join('\n\n'), media });
   }
   return pages;
 }
@@ -183,14 +189,24 @@ async function parseXlsx(read) {
 
 const OFFICE = { docx: parseDocx, pptx: parsePptx, xlsx: parseXlsx };
 
+const noVisuals = { graphics: new Set(), loadVisual: async () => null, close: () => {} };
+
 /**
- * @param imageText transcription for image uploads (see imageTextService)
- * @returns {Promise<{ pageCount: number, pages: { page: number, text: string }[] }>}
+ * Text per page (CPU only), plus which pages have pictures/drawings and a loader that turns
+ * such a page into an image for the vision model.
+ * @returns {Promise<{ format, pageCount, pages: { page, text }[], graphics: Set<number>,
+ *   loadVisual(page): Promise<{ data: Buffer, mime: string } | null>, close(): void }>}
  */
-export async function extractDocument(buffer, filename, { imageText } = {}) {
+export async function extractDocument(buffer, filename) {
   const format = detectFormat(buffer, filename);
-  if (format === 'pdf') return extractPages(buffer);
-  if (isImageFormat(format)) return { pageCount: 1, pages: [{ page: 1, text: imageText ?? '' }] };
+  if (format === 'pdf') {
+    const { pageCount, pages, graphics } = await extractPages(buffer);
+    const renderer = pdfPageRenderer(buffer);
+    return { format, pageCount, pages, graphics, loadVisual: (p) => renderer.render(p), close: renderer.close };
+  }
+  if (isImageFormat(format)) {
+    return { format, pageCount: 1, pages: [{ page: 1, text: '' }], graphics: new Set([1]), loadVisual: async () => ({ data: buffer, mime: IMAGE_MIME[format] }), close: () => {} };
+  }
   if (OFFICE[format]) {
     let zip;
     try {
@@ -198,14 +214,32 @@ export async function extractDocument(buffer, filename, { imageText } = {}) {
     } catch (err) {
       throw new PdfError('Could not read this file (it may be corrupted or password-protected).', { cause: err });
     }
-    const pages = await OFFICE[format](zipReader(zip));
-    return { pageCount: pages.length, pages };
+    const read = zipReader(zip);
+    const parsed = await OFFICE[format](read);
+    const media = new Map(parsed.filter((p) => p.media?.length).map((p) => [p.page, p.media]));
+    const pages = parsed.map(({ page, text }) => ({ page, text }));
+    // The biggest picture on the slide is the one worth reading.
+    const loadVisual = async (page) => {
+      let best = null;
+      for (const path of media.get(page) ?? []) {
+        const data = await read(path, true);
+        if (data && (!best || data.length > best.data.length)) best = { data, mime: SLIDE_IMAGE_MIME[extensionOf(path)] };
+      }
+      return best;
+    };
+    return { format, pageCount: pages.length, pages, graphics: new Set(media.keys()), loadVisual, close: () => {} };
   }
   if (format) {
     const text = decodeText(buffer) ?? '';
     const paras = text.replace(/\r\n?/g, '\n').split(format === 'csv' ? /\n+/ : /\n\s*\n/).map((p) => p.trim()).filter(Boolean);
     const pages = paginate(paras);
-    return { pageCount: pages.length, pages };
+    return { format, pageCount: pages.length, pages, ...noVisuals };
   }
   throw new PdfError('Unsupported or damaged file.');
+}
+
+/** Pages to send to the vision model: every image upload, and visual pages with little text. */
+export function pagesNeedingVision({ format, pages, graphics }) {
+  if (isImageFormat(format)) return [1];
+  return pages.filter((p) => graphics.has(p.page) && p.text.trim().length < VISION_MAX_TEXT_CHARS).map((p) => p.page);
 }

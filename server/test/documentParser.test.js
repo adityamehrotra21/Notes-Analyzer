@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
-import { detectFormat, extractDocument, unsupportedReason } from '../src/services/documentParser.js';
+import { detectFormat, extractDocument, pagesNeedingVision, unsupportedReason } from '../src/services/documentParser.js';
 import { domainAcceptsMail, isValidEmailFormat, suggestEmail } from '../src/utils/email.js';
 
 const zip = (files) => { const z = new JSZip(); for (const [k, v] of Object.entries(files)) z.file(k, v); return z.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }); };
@@ -74,4 +74,22 @@ test('domain check: MX, null MX, no domain, A fallback, DNS outage', async () =>
   assert.equal(await domainAcceptsMail('x.com', r({ resolve4: async () => ['1.2.3.4'] })), true);
   assert.equal(await domainAcceptsMail('x.com', r()), false);
   assert.equal(await domainAcceptsMail('x.com', r({ resolveMx: fail('ETIMEOUT') })), true);
+});
+
+test('vision only for visual pages with little text', async () => {
+  const pages = [{ page: 1, text: 'Fig 1' }, { page: 2, text: 'x'.repeat(2000) }, { page: 3, text: '' }, { page: 4, text: 'Plain short page' }];
+  assert.deepEqual(pagesNeedingVision({ format: 'pdf', pages, graphics: new Set([1, 2, 3]) }), [1, 3]);
+  assert.deepEqual(pagesNeedingVision({ format: 'png', pages: [{ page: 1, text: '' }], graphics: new Set([1]) }), [1]);
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const b = await zip({
+    'ppt/presentation.xml': '<p:sldId id="1" r:id="rId1"/>',
+    'ppt/_rels/presentation.xml.rels': `<Relationships>${rel('rId1', 'slide', 'slides/slide1.xml')}</Relationships>`,
+    'ppt/slides/slide1.xml': '<a:p><a:r><a:t>Cycle</a:t></a:r></a:p>',
+    'ppt/slides/_rels/slide1.xml.rels': `<Relationships>${rel('rId1', 'image', '../media/a.emf')}${rel('rId2', 'image', '../media/b.png')}</Relationships>`,
+    'ppt/media/a.emf': 'x',
+    'ppt/media/b.png': png,
+  });
+  const ex = await extractDocument(b, 'a.pptx');
+  assert.deepEqual(pagesNeedingVision(ex), [1]);
+  assert.equal((await ex.loadVisual(1)).mime, 'image/png'); // EMF is skipped: the vision model can't read it
 });

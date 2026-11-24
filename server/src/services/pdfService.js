@@ -1,6 +1,7 @@
 // PDF -> per-page text -> cleaned text. No env/DB access so scripts can use it standalone.
 // pdf-parse v2 (modern pdfjs-dist) returns text per page with one line per visual line.
 import { PDFParse } from 'pdf-parse';
+import { OPS } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 export class PdfError extends Error {}
 
@@ -29,15 +30,59 @@ function markParagraphs(text) {
   return out.join('\n');
 }
 
-/** @returns {Promise<{ pageCount: number, pages: { page: number, text: string }[] }>} */
+const IMAGE_OPS = new Set([OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject]);
+const MIN_IMAGE_PX = 64; // smaller images are icons/bullets
+const MIN_PATHS = 12; // vector drawing (diagram, chart, graph); a few paths are just underlines or borders
+
+/**
+ * Pages with a picture or a vector drawing. An image of the same size on most pages is a logo
+ * or background and doesn't count.
+ * @returns {Promise<Set<number>>}
+ */
+async function graphicPages(doc, pageCount) {
+  const perPage = [];
+  for (let n = 1; n <= pageCount; n++) {
+    const page = await doc.getPage(n);
+    const { fnArray, argsArray } = await page.getOperatorList();
+    const sizes = [];
+    let paths = 0;
+    fnArray.forEach((fn, i) => {
+      if (fn === OPS.constructPath) paths++;
+      else if (IMAGE_OPS.has(fn)) {
+        const a = argsArray[i] ?? [];
+        const [w, h] = typeof a[1] === 'number' ? [a[1], a[2]] : [a[0]?.width, a[0]?.height];
+        if (!(w < MIN_IMAGE_PX || h < MIN_IMAGE_PX)) sizes.push(`${w}x${h}`);
+      }
+    });
+    page.cleanup();
+    perPage.push({ sizes: new Set(sizes), paths });
+  }
+  const seen = new Map();
+  for (const { sizes } of perPage) for (const s of sizes) seen.set(s, (seen.get(s) ?? 0) + 1);
+  const repeated = Math.max(3, Math.ceil(pageCount * 0.5));
+  const result = new Set();
+  perPage.forEach(({ sizes, paths }, i) => {
+    if (paths >= MIN_PATHS || [...sizes].some((s) => seen.get(s) < repeated)) result.add(i + 1);
+  });
+  return result;
+}
+
+/** @returns {Promise<{ pageCount: number, pages: { page: number, text: string }[], graphics: Set<number> }>} */
 export async function extractPages(buffer) {
   // Copy: pdf.js may transfer (detach) the underlying ArrayBuffer.
   const parser = new PDFParse({ data: new Uint8Array(buffer), verbosity: 0 });
   try {
     const result = await parser.getText();
+    let graphics = new Set();
+    try {
+      graphics = await graphicPages(await parser.load(), result.total);
+    } catch {
+      // Drawing analysis is optional: the text alone still works.
+    }
     return {
       pageCount: result.total,
       pages: result.pages.map((p) => ({ page: p.num, text: markParagraphs(p.text) })),
+      graphics,
     };
   } catch (err) {
     const msg = err?.name === 'PasswordException' ? 'This PDF is password-protected.' : 'Could not read this PDF (it may be corrupted).';
@@ -45,6 +90,20 @@ export async function extractPages(buffer) {
   } finally {
     await parser.destroy().catch(() => {});
   }
+}
+
+/** Renders pages to PNG on demand (for the vision model). Call close() when done. */
+export function pdfPageRenderer(buffer, width = 1400) {
+  let parser;
+  return {
+    async render(page) {
+      parser ??= new PDFParse({ data: new Uint8Array(buffer), verbosity: 0 });
+      const shot = await parser.getScreenshot({ partial: [page], desiredWidth: width, imageBuffer: true, imageDataUrl: false });
+      const data = shot.pages[0]?.data;
+      return data ? { data: Buffer.from(data), mime: 'image/png' } : null;
+    },
+    close: () => parser?.destroy().catch(() => {}),
+  };
 }
 
 const PAGE_NUMBER = /^(page\s*)?\d{1,4}(\s*(of|\/)\s*\d{1,4})?$/i;

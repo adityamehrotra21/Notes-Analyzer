@@ -1,11 +1,11 @@
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 
-const STAGES = { queued: 'Queued', parsing: 'Reading file', chunking: 'Splitting', embedding: 'Indexing', saving: 'Saving' };
+const STAGES = { queued: 'Queued', parsing: 'Reading file', vision: 'Reading diagrams', chunking: 'Splitting', embedding: 'Indexing', saving: 'Saving' };
 
 function progressLabel(progress) {
   if (!progress) return 'Processing';
   const label = STAGES[progress.stage] ?? 'Processing';
-  return progress.stage === 'embedding' && progress.total ? `${label} ${Math.min(99, Math.round((progress.done / progress.total) * 100))}%` : label;
+  return ['embedding', 'vision'].includes(progress.stage) && progress.total ? `${label} ${Math.min(99, Math.round((progress.done / progress.total) * 100))}%` : label;
 }
 
 export default function StatusBadge({ status, progress, error }) {

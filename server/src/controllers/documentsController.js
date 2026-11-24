@@ -4,7 +4,7 @@ import { chunks, documents, users } from '../db/schema.js';
 import { AppError } from '../utils/AppError.js';
 import { createHash } from 'node:crypto';
 import { enqueueIngestion, getProgress, prepareChunks } from '../services/ingestionService.js';
-import { deletePdf, hasPdf, readImageText, readPdf, savePdf } from '../services/fileStorage.js';
+import { deletePdf, hasPdf, readPdf, readVisionPages, savePdf } from '../services/fileStorage.js';
 import { detectFormat, isImageFormat } from '../services/documentParser.js';
 import { env } from '../config/env.js';
 import { costUsd, priceFor } from '../config/pricing.js';
@@ -133,9 +133,9 @@ async function loadForReindex(userId, documentId) {
 async function estimateReindex(userId, doc) {
   const buffer = await readPdf(userId, doc.id);
   const isImage = isImageFormat(detectFormat(buffer, doc.filename));
-  const imageText = isImage ? await readImageText(userId, doc.id) : undefined;
-  // An image with no saved transcription can't be chunked without a paid call, so report the current index.
-  const { pageCount, pieces, tokens } = isImage && !imageText ? { pageCount: 1, pieces: { length: doc.chunkCount }, tokens: 0 } : await prepareChunks(buffer, doc.filename, { imageText });
+  const visionPages = await readVisionPages(userId, doc.id); // no paid calls here: only what was already read
+  // An image with no saved reading can't be chunked without a paid call, so report the current index.
+  const { pageCount, pieces, tokens } = isImage && !visionPages[1] ? { pageCount: 1, pieces: { length: doc.chunkCount }, tokens: 0 } : await prepareChunks(buffer, doc.filename, { visionPages });
   const model = env.EMBED_PROVIDER === 'openai' ? env.OPENAI_EMBED_MODEL : env.EMBED_PROVIDER;
   const price = priceFor(model);
   const estimatedUsd = price ? Math.round(costUsd(price, { inputTokens: tokens }) * 1e8) / 1e8 : 0;

@@ -102,7 +102,8 @@ const schema = z.object({
   MAX_OUTPUT_TOKENS_NOTES_FILL: optionalInt(4000), // sections for topics the coverage check found missing
   MAX_OUTPUT_TOKENS_OUTLINE: optionalInt(2000), // topic outline extraction (gpt-5-nano)
   MAX_OUTPUT_TOKENS_CLASSIFY: optionalInt(200), // intent fallback classifier (gpt-5-nano)
-  MAX_OUTPUT_TOKENS_OCR: optionalInt(3000), // text transcribed from one uploaded image
+  MAX_OUTPUT_TOKENS_OCR: optionalInt(3000), // one image or diagram page read by the vision model
+  VISION_MAX_PAGES: optionalInt(30), // diagram/scanned pages read per document (each is a paid vision call)
 
   // ---- Embeddings. "hash" is an offline lexical embedder for testing (not for real use).
   EMBED_PROVIDER: z.enum(['openai', 'gemini', 'hash']).default('openai'),
